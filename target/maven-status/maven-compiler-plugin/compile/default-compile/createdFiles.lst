@@ -1,0 +1,10 @@
+com\certifika2\usuario\model\RolCurso.class
+com\certifika2\usuario\config\SecurityConfig.class
+com\certifika2\usuario\controller\UsuarioController.class
+com\certifika2\usuario\model\Usuario.class
+com\certifika2\usuario\UsuarioApplication.class
+com\certifika2\usuario\model\UsuarioCurso.class
+com\certifika2\usuario\service\UsuarioService.class
+com\certifika2\usuario\repository\UsuarioRepository.class
+com\certifika2\usuario\controller\UsuarioController$RegistroUsuarioRequest.class
+com\certifika2\usuario\repository\UsuarioCursoRepository.class
