@@ -22,7 +22,18 @@ public class UsuarioService {
         Optional<Usuario> usuarioExistente = usuarioRepository.findByIdExterna(idExterna);
         
         if (usuarioExistente.isPresent()) {
-            return usuarioExistente.get();
+            Usuario actual = usuarioExistente.get();
+            boolean changed = false;
+            if (nombre != null && !nombre.isBlank() && !nombre.equals(actual.getNombreUsuario())) {
+                actual.setNombreUsuario(nombre); changed = true;
+            }
+            if (email != null && !email.isBlank() && !email.equals(actual.getEmail())) {
+                if (usuarioRepository.findByEmail(email).filter(other -> !other.getIdExterna().equals(idExterna)).isPresent()) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "El correo ya esta asociado con otra identidad");
+                }
+                actual.setEmail(email); changed = true;
+            }
+            return changed ? usuarioRepository.saveAndFlush(actual) : actual;
         }
 
         Usuario nuevoUsuario = new Usuario();
@@ -31,7 +42,7 @@ public class UsuarioService {
         nuevoUsuario.setNombreUsuario(nombre);
         
         Set<String> grupos = new HashSet<>();
-        grupos.add("ROLE_USER"); // Rol por defecto
+        grupos.add("ROLE_ESTUDIANTE"); // Every new account starts as a student.
         nuevoUsuario.setGrupo(grupos);
 
         try {
