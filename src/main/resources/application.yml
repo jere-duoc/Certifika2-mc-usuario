@@ -32,5 +32,7 @@ app:
     enabled: ${CERTIFICADOS_ENABLED:false}
     stream: ${KINESIS_CERTIFICADOS_STREAM:}
     bucket: ${S3_CERTIFICADOS_BUCKET:}
+    firehose-stream: ${FIREHOSE_STREAM_EMITIDOS:}
     kinesis-endpoint: ${KINESIS_ENDPOINT:}
     s3-endpoint: ${S3_ENDPOINT:}
+    firehose-endpoint: ${FIREHOSE_ENDPOINT:}

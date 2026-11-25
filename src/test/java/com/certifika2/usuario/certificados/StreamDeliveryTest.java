@@ -19,7 +19,10 @@ import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.*;
 
 @DataJpaTest @Import({CertificadoProcessor.class, CertificadoRenderer.class, StreamBatchProcessor.class, StreamDeliveryTest.JsonConfig.class})
-@TestPropertySource(properties = "app.certificados.bucket=certifika2-certificados-test")
+@TestPropertySource(properties = {
+        "app.certificados.bucket=certifika2-certificados-test",
+        "app.certificados.firehose-stream=certifika2-emitidos-test"
+})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class StreamDeliveryTest {
     @Autowired StreamBatchProcessor batches;
@@ -67,6 +70,13 @@ class StreamDeliveryTest {
         verify(aws).putObject(anyString(), anyString(), data.capture(), eq("image/png"));
         var image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data.getValue()));
         assertThat(image.getWidth()).isEqualTo(1600); assertThat(image.getHeight()).isEqualTo(1120);
+        verify(aws, times(1)).firehosePutRecord(eq("certifika2-emitidos-test"), any());
+    }
+    @Test void firehoseFailureDoesNotBlockCertificateIssuance() throws Exception {
+        doThrow(new IllegalStateException("Firehose unavailable")).when(aws).firehosePutRecord(anyString(), any());
+        batches.procesar("stream:shard", List.of(record("1", "PDF")));
+        assertThat(certificados.count()).isEqualTo(1);
+        assertThat(checkpoints.findById("stream:shard").orElseThrow().getSecuencia()).isEqualTo("1");
     }
     private com.fasterxml.jackson.databind.node.ObjectNode record(String sequence, String format) throws Exception {
         var event = new CertificadoProcessor.Evento(1, "b60b0798-d293-4dda-bb0c-9aa69d5c068e", "student", 12L,

@@ -17,10 +17,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
 
-/** Small SigV4 transport for Kinesis JSON and S3 objects using the existing AWS SDK.
+/** Small SigV4 transport for Kinesis JSON, Firehose JSON, and S3 objects using the existing AWS SDK.
  * Uses the standard credentials chain; never stores keys or returns AWS error bodies.
  */
 @Component
@@ -29,6 +30,7 @@ public class CertificateAwsClient {
     private final Region region;
     private final String kinesisEndpoint;
     private final String s3Endpoint;
+    private final String firehoseEndpoint;
     private final software.amazon.awssdk.auth.credentials.AwsCredentialsProvider credentials;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
 
@@ -36,17 +38,24 @@ public class CertificateAwsClient {
     public CertificateAwsClient(ObjectMapper mapper,
             @Value("${AWS_REGION:us-east-1}") String region,
             @Value("${app.certificados.kinesis-endpoint:}") String kinesisEndpoint,
-            @Value("${app.certificados.s3-endpoint:}") String s3Endpoint) {
-        this(mapper, region, kinesisEndpoint, s3Endpoint, DefaultCredentialsProvider.create());
+            @Value("${app.certificados.s3-endpoint:}") String s3Endpoint,
+            @Value("${app.certificados.firehose-endpoint:}") String firehoseEndpoint) {
+        this(mapper, region, kinesisEndpoint, s3Endpoint, firehoseEndpoint, DefaultCredentialsProvider.create());
     }
 
     CertificateAwsClient(ObjectMapper mapper, String region, String kinesisEndpoint, String s3Endpoint,
             software.amazon.awssdk.auth.credentials.AwsCredentialsProvider credentials) {
+        this(mapper, region, kinesisEndpoint, s3Endpoint, "", credentials);
+    }
+
+    CertificateAwsClient(ObjectMapper mapper, String region, String kinesisEndpoint, String s3Endpoint,
+            String firehoseEndpoint, software.amazon.awssdk.auth.credentials.AwsCredentialsProvider credentials) {
         this.credentials = credentials;
         this.mapper = mapper;
         this.region = Region.of(region);
         this.kinesisEndpoint = kinesisEndpoint.isBlank() ? "https://kinesis." + region + ".amazonaws.com" : kinesisEndpoint;
         this.s3Endpoint = s3Endpoint.isBlank() ? "https://s3." + region + ".amazonaws.com" : s3Endpoint;
+        this.firehoseEndpoint = firehoseEndpoint.isBlank() ? "https://firehose." + region + ".amazonaws.com" : firehoseEndpoint;
     }
 
     public JsonNode kinesis(String operation, Map<String, ?> payload) {
@@ -57,6 +66,22 @@ public class CertificateAwsClient {
                             "X-Amz-Target", "Kinesis_20131202." + operation)));
         } catch (java.io.IOException ex) {
             throw new IllegalStateException("Respuesta Kinesis invalida", ex);
+        }
+    }
+
+    public JsonNode firehosePutRecord(String deliveryStreamName, byte[] data) {
+        if (deliveryStreamName == null || deliveryStreamName.isBlank()) {
+            throw new IllegalArgumentException("Delivery stream de Firehose obligatorio");
+        }
+        try {
+            byte[] payload = mapper.writeValueAsBytes(Map.of(
+                    "DeliveryStreamName", deliveryStreamName,
+                    "Record", Map.of("Data", Base64.getEncoder().encodeToString(data))));
+            return mapper.readTree(send("firehose", URI.create(firehoseEndpoint), SdkHttpMethod.POST,
+                    payload, Map.of("Content-Type", "application/x-amz-json-1.1",
+                            "X-Amz-Target", "Firehose_20150804.PutRecord")));
+        } catch (java.io.IOException ex) {
+            throw new IllegalStateException("Respuesta Firehose invalida", ex);
         }
     }
 

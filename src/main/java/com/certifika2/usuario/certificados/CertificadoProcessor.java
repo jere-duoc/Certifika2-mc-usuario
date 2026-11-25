@@ -2,14 +2,18 @@ package com.certifika2.usuario.certificados;
 
 import com.certifika2.usuario.repository.UsuarioRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.UUID;
 
-@Service
+@Service @Slf4j
 public class CertificadoProcessor {
     private final CertificadoRepository certificados;
     private final UsuarioRepository usuarios;
@@ -17,10 +21,20 @@ public class CertificadoProcessor {
     private final CertificadoRenderer renderer;
     private final CertificateAwsClient aws;
     private final String bucket;
+    private final String firehoseStream;
+
     public CertificadoProcessor(CertificadoRepository certificados, UsuarioRepository usuarios, ObjectMapper mapper,
-            CertificadoRenderer renderer, CertificateAwsClient aws, @Value("${app.certificados.bucket:}") String bucket) {
+            CertificadoRenderer renderer, CertificateAwsClient aws, String bucket) {
+        this(certificados, usuarios, mapper, renderer, aws, bucket, "");
+    }
+
+    @Autowired
+    public CertificadoProcessor(CertificadoRepository certificados, UsuarioRepository usuarios, ObjectMapper mapper,
+            CertificadoRenderer renderer, CertificateAwsClient aws,
+            @Value("${app.certificados.bucket:}") String bucket,
+            @Value("${app.certificados.firehose-stream:}") String firehoseStream) {
         this.certificados = certificados; this.usuarios = usuarios; this.mapper = mapper;
-        this.renderer = renderer; this.aws = aws; this.bucket = bucket;
+        this.renderer = renderer; this.aws = aws; this.bucket = bucket; this.firehoseStream = firehoseStream;
     }
     @Transactional
     public Certificado procesar(byte[] data) {
@@ -43,7 +57,35 @@ public class CertificadoProcessor {
         c.setBucket(bucket); c.setObjectKey("certificados/" + evento.eventId() + "." + evento.formato().toLowerCase(java.util.Locale.ROOT));
         byte[] file = renderer.render(c); c.setTamanoBytes(file.length);
         aws.putObject(bucket, c.getObjectKey(), file, "PDF".equals(c.getFormato()) ? "application/pdf" : "image/png");
-        return certificados.saveAndFlush(c);
+        Certificado saved = certificados.saveAndFlush(c);
+        enviarFirehose(saved);
+        return saved;
+    }
+
+    private void enviarFirehose(Certificado c) {
+        if (firehoseStream == null || firehoseStream.isBlank()) return;
+        try {
+            var payload = new LinkedHashMap<String, Object>();
+            payload.put("eventId", c.getEventId());
+            payload.put("codigoVerificacion", c.getCodigoVerificacion());
+            payload.put("idUsuario", c.getIdUsuario());
+            payload.put("nombreTitular", c.getNombreTitular());
+            payload.put("idCurso", c.getIdCurso());
+            payload.put("codigoCurso", c.getCodigoCurso());
+            payload.put("nombreCurso", c.getNombreCurso());
+            payload.put("nivelCurso", c.getNivelCurso());
+            payload.put("formato", c.getFormato());
+            payload.put("tamanoBytes", c.getTamanoBytes());
+            payload.put("bucket", c.getBucket());
+            payload.put("objectKey", c.getObjectKey());
+            payload.put("fechaCompletado", c.getFechaCompletado());
+            payload.put("fechaEmision", c.getFechaEmision());
+            byte[] line = (mapper.writeValueAsString(payload) + "\n").getBytes(StandardCharsets.UTF_8);
+            aws.firehosePutRecord(firehoseStream, line);
+        } catch (RuntimeException | java.io.IOException ex) {
+            log.warn("No se pudo enviar certificado {} a Firehose {}: {}",
+                    c.getCodigoVerificacion(), firehoseStream, ex.getMessage());
+        }
     }
     private void validar(Evento e) {
         if (e.version() != 1 || e.eventId() == null || e.idUsuario() == null || e.idUsuario().isBlank()
