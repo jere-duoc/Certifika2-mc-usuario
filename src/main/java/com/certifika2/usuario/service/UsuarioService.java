@@ -4,6 +4,9 @@ import com.certifika2.usuario.model.Usuario;
 import com.certifika2.usuario.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashSet;
 import java.util.Optional;
@@ -31,7 +34,18 @@ public class UsuarioService {
         grupos.add("ROLE_USER"); // Rol por defecto
         nuevoUsuario.setGrupo(grupos);
 
-        return usuarioRepository.save(nuevoUsuario);
+        try {
+            return usuarioRepository.saveAndFlush(nuevoUsuario);
+        } catch (DataIntegrityViolationException duplicate) {
+            // Repository transactions have already rolled back here; reread the concurrent winner.
+            var winner = usuarioRepository.findByIdExterna(idExterna);
+            if (winner.isPresent()) return winner.get();
+            if (usuarioRepository.findByEmail(email).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "El correo ya esta asociado con otra identidad", duplicate);
+            }
+            throw duplicate;
+        }
     }
 
     public Usuario habilitarProfesor(Long idUsuario) {
