@@ -22,7 +22,7 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Instalar curl para healthchecks de ECS
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl fontconfig font-dejavu
 
 # Crear usuario y grupo sin privilegios de root
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
