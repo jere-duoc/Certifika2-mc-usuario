@@ -15,7 +15,20 @@
 	<description>Microservicio de Usuarios para Certifika2</description>
 	<properties>
 		<java.version>17</java.version>
+		<aws.sdk.version>2.25.0</aws.sdk.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<!-- BOM del AWS SDK v2: alinea las versiones de todos los clientes AWS -->
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws.sdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -29,6 +42,25 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+		<!-- Streaming: consumo de Kinesis, entrega a Firehose y almacenamiento en S3 -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>kinesis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>firehose</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+		</dependency>
+		<!-- Generación de certificados en PDF -->
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>1.3.43</version>
 		</dependency>
 		<dependency>
 			<groupId>com.mysql</groupId>

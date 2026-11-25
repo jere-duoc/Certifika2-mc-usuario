@@ -26,3 +26,26 @@ spring:
 
 cognito:
   client-id: ${COGNITO_CLIENT_ID:1rf3bts7p2klg1qvsjhqnb5o3n}
+
+# --- Streaming de certificados (Kinesis -> generación -> S3 + Firehose) ---
+certifika2:
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    # Vacío = AWS real (credenciales por DefaultCredentialsProvider / rol de la instancia).
+    # http://localhost:4566 = LocalStack.
+    endpoint: ${AWS_ENDPOINT:http://localhost:4566}
+  kinesis:
+    stream-solicitudes: ${KINESIS_STREAM_SOLICITUDES:certifika2-certificados-solicitados}
+    stream-dlq: ${KINESIS_STREAM_DLQ:certifika2-certificados-dlq}
+    consumer:
+      enabled: ${KINESIS_CONSUMER_ENABLED:true}
+      # Nombre lógico del consumidor: identifica sus checkpoints (equivalente a un consumer group).
+      nombre: ${KINESIS_CONSUMER_NAME:ms-usuarios-certificados}
+      poll-interval-ms: 2000
+      max-records: 100
+      max-intentos: 3
+      backoff-inicial-ms: 500
+  firehose:
+    stream-emitidos: ${FIREHOSE_STREAM_EMITIDOS:certifika2-certificados-emitidos}
+  s3:
+    bucket-certificados: ${S3_BUCKET_CERTIFICADOS:certifika2-certificados}
